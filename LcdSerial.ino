@@ -39,27 +39,72 @@
 #include <LiquidCrystal.h>
 #include <Serial.h>
 
-// initialize the library with the numbers of the interface pins
+#define NEW_LINE_THRESHOLD 1000
+#define LCD_COLUMNS 16
+#define LCD_ROWS     2
+
+int charCnt = 0;
+unsigned long timeStamp = 0;
+char lineBuf[LCD_COLUMNS];
+
+// initialize the library with the numbers of the interface pins  
 LiquidCrystal lcd(2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
 
 void setup() {
   // set up the LCD's number of columns and rows: 
-  lcd.begin(16, 2);
-  //lcd.autoscroll();
+  lcd.begin(LCD_COLUMNS, LCD_ROWS);
   lcd.clear();
+  
+  timeStamp = millis();
 
   Serial.begin(9600);
+
+  memset(lineBuf, 0, sizeof(lineBuf));
+}
+
+void migrateLine() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  
+  //Move the old second row to the first
+  for (int i = 0; i < LCD_COLUMNS; i++) {
+    if (lineBuf[i] == 0) {
+        break;
+    }
+    lcd.write(lineBuf[i]); 
+  }
+  memset(lineBuf, 0, sizeof(lineBuf));
+           
+  charCnt = 0;
+  lcd.setCursor(0, 1);  
 }
 
 void loop() {
   if (Serial.available() > 0) {
-    int incByte = Serial.read();
+    unsigned long newTimeStamp = millis();
+
+    //Migrate the old second line to the first line
+    if (charCnt >= LCD_COLUMNS) {
+      migrateLine();
+    } else {
+      //Try to detect the end of a line
+      unsigned long delta = newTimeStamp - timeStamp;
+      if (delta > NEW_LINE_THRESHOLD) {
+        migrateLine();        
+      }
+    }
+ 
+    lineBuf[charCnt] = Serial.read();    
+
+    timeStamp = newTimeStamp;
     
     //Loop back what is read
-    Serial.write(incByte);
+    Serial.write(lineBuf[charCnt]);
 
     // read the incoming byte:
-    lcd.write(incByte);
+    lcd.write(lineBuf[charCnt]);
+    
+    charCnt++;
   }
 }
 
